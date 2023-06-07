@@ -1,5 +1,3 @@
-// Copyright (c) 2017-present PyO3 Project and Contributors
-
 //! Defines conversions between Rust and Python types.
 use crate::err::{self, PyDowncastError, PyResult};
 #[cfg(feature = "experimental-inspect")]
@@ -669,7 +667,7 @@ mod tests {
     #[test]
     fn test_try_from_unchecked() {
         Python::with_gil(|py| {
-            let list = PyList::new(py, &[1, 2, 3]);
+            let list = PyList::new(py, [1, 2, 3]);
             let val = unsafe { <PyList as PyTryFrom>::try_from_unchecked(list.as_ref()) };
             assert!(list.is(val));
         });

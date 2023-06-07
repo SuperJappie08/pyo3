@@ -3,7 +3,34 @@
 This guide can help you upgrade code through breaking changes from one PyO3 version to the next.
 For a detailed list of all changes, see the [CHANGELOG](changelog.md).
 
+## from 0.19.* to 0.20
+
+### Drop support for older technologies
+
+PyO3 0.20 has increased minimum Rust version to 1.56. This enables use of newer language features and simplifies maintenance of the project.
+
 ## from 0.18.* to 0.19
+
+### Access to `Python` inside `__traverse__` implementations are now forbidden
+
+During `__traverse__` implementations for Python's Garbage Collection it is forbidden to do anything other than visit the members of the `#[pyclass]` being traversed. This means making Python function calls or other API calls are forbidden.
+
+Previous versions of PyO3 would allow access to `Python` (e.g. via `Python::with_gil`), which could cause the Python interpreter to crash or otherwise confuse the garbage collection algorithm.
+
+Attempts to acquire the GIL will now panic. See [#3165](https://github.com/PyO3/pyo3/issues/3165) for more detail.
+
+```rust,ignore
+# use pyo3::prelude::*;
+
+#[pyclass]
+struct SomeClass {}
+
+impl SomeClass {
+    fn __traverse__(&self, pyo3::class::gc::PyVisit<'_>) -> Result<(), pyo3::class::gc::PyTraverseError>` {
+        Python::with_gil(|| { /*...*/ })  // ERROR: this will panic
+    }
+}
+```
 
 ### Smarter `anyhow::Error` / `eyre::Report` conversion when inner error is "simple" `PyErr`
 

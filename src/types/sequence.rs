@@ -1,4 +1,3 @@
-// Copyright (c) 2017-present PyO3 Project and Contributors
 use crate::err::{self, PyDowncastError, PyErr, PyResult};
 use crate::exceptions::PyTypeError;
 #[cfg(feature = "experimental-inspect")]
@@ -833,7 +832,7 @@ mod tests {
             assert!(seq
                 .to_list()
                 .unwrap()
-                .eq(PyList::new(py, &["f", "o", "o"]))
+                .eq(PyList::new(py, ["f", "o", "o"]))
                 .unwrap());
             #[allow(deprecated)]
             {
@@ -851,7 +850,7 @@ mod tests {
             assert!(seq
                 .to_tuple()
                 .unwrap()
-                .eq(PyTuple::new(py, &["foo", "bar"]))
+                .eq(PyTuple::new(py, ["foo", "bar"]))
                 .unwrap());
             #[allow(deprecated)]
             {

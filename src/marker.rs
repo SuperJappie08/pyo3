@@ -1,7 +1,3 @@
-// Copyright (c) 2017-present PyO3 Project and Contributors
-//
-// based on Daniel Grunwald's https://github.com/dgrunwald/rust-cpython
-
 //! Fundamental properties of objects tied to the Python interpreter.
 //!
 //! The Python interpreter is not threadsafe. To protect the Python interpreter in multithreaded
@@ -1053,7 +1049,7 @@ mod tests {
 
             // If allow_threads is implemented correctly, this thread still owns the GIL here
             // so the following Python calls should not cause crashes.
-            let list = PyList::new(py, &[1, 2, 3, 4]);
+            let list = PyList::new(py, [1, 2, 3, 4]);
             assert_eq!(list.extract::<Vec<i32>>().unwrap(), vec![1, 2, 3, 4]);
         });
     }

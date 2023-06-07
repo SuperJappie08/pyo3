@@ -1,7 +1,3 @@
-// Copyright (c) 2017-present PyO3 Project and Contributors
-//
-// based on Daniel Grunwald's https://github.com/dgrunwald/rust-cpython
-
 use std::convert::TryInto;
 
 use crate::err::{self, PyResult};
@@ -123,7 +119,7 @@ impl PyList {
     /// ```
     /// use pyo3::{prelude::*, types::PyList};
     /// Python::with_gil(|py| {
-    ///     let list = PyList::new(py, &[2, 3, 5, 7]);
+    ///     let list = PyList::new(py, [2, 3, 5, 7]);
     ///     let obj = list.get_item(0);
     ///     assert_eq!(obj.unwrap().extract::<i32>().unwrap(), 2);
     /// });
@@ -355,7 +351,7 @@ mod tests {
     #[test]
     fn test_new() {
         Python::with_gil(|py| {
-            let list = PyList::new(py, &[2, 3, 5, 7]);
+            let list = PyList::new(py, [2, 3, 5, 7]);
             assert_eq!(2, list[0].extract::<i32>().unwrap());
             assert_eq!(3, list[1].extract::<i32>().unwrap());
             assert_eq!(5, list[2].extract::<i32>().unwrap());
@@ -366,7 +362,7 @@ mod tests {
     #[test]
     fn test_len() {
         Python::with_gil(|py| {
-            let list = PyList::new(py, &[1, 2, 3, 4]);
+            let list = PyList::new(py, [1, 2, 3, 4]);
             assert_eq!(4, list.len());
         });
     }
@@ -374,7 +370,7 @@ mod tests {
     #[test]
     fn test_get_item() {
         Python::with_gil(|py| {
-            let list = PyList::new(py, &[2, 3, 5, 7]);
+            let list = PyList::new(py, [2, 3, 5, 7]);
             assert_eq!(2, list.get_item(0).unwrap().extract::<i32>().unwrap());
             assert_eq!(3, list.get_item(1).unwrap().extract::<i32>().unwrap());
             assert_eq!(5, list.get_item(2).unwrap().extract::<i32>().unwrap());
@@ -385,7 +381,7 @@ mod tests {
     #[test]
     fn test_get_slice() {
         Python::with_gil(|py| {
-            let list = PyList::new(py, &[2, 3, 5, 7]);
+            let list = PyList::new(py, [2, 3, 5, 7]);
             let slice = list.get_slice(1, 3);
             assert_eq!(2, slice.len());
             let slice = list.get_slice(1, 7);
@@ -396,7 +392,7 @@ mod tests {
     #[test]
     fn test_set_item() {
         Python::with_gil(|py| {
-            let list = PyList::new(py, &[2, 3, 5, 7]);
+            let list = PyList::new(py, [2, 3, 5, 7]);
             let val = 42i32.to_object(py);
             let val2 = 42i32.to_object(py);
             assert_eq!(2, list[0].extract::<i32>().unwrap());
@@ -427,7 +423,7 @@ mod tests {
     #[test]
     fn test_insert() {
         Python::with_gil(|py| {
-            let list = PyList::new(py, &[2, 3, 5, 7]);
+            let list = PyList::new(py, [2, 3, 5, 7]);
             let val = 42i32.to_object(py);
             let val2 = 43i32.to_object(py);
             assert_eq!(4, list.len());
@@ -460,7 +456,7 @@ mod tests {
     #[test]
     fn test_append() {
         Python::with_gil(|py| {
-            let list = PyList::new(py, &[2]);
+            let list = PyList::new(py, [2]);
             list.append(3).unwrap();
             assert_eq!(2, list[0].extract::<i32>().unwrap());
             assert_eq!(3, list[1].extract::<i32>().unwrap());
@@ -518,7 +514,7 @@ mod tests {
     #[test]
     fn test_into_iter() {
         Python::with_gil(|py| {
-            let list = PyList::new(py, &[1, 2, 3, 4]);
+            let list = PyList::new(py, [1, 2, 3, 4]);
             for (i, item) in list.iter().enumerate() {
                 assert_eq!((i + 1) as i32, item.extract::<i32>().unwrap());
             }
@@ -582,7 +578,7 @@ mod tests {
     #[test]
     fn test_list_get_item_invalid_index() {
         Python::with_gil(|py| {
-            let list = PyList::new(py, &[2, 3, 5, 7]);
+            let list = PyList::new(py, [2, 3, 5, 7]);
             let obj = list.get_item(5);
             assert!(obj.is_err());
             assert_eq!(
@@ -595,7 +591,7 @@ mod tests {
     #[test]
     fn test_list_get_item_sanity() {
         Python::with_gil(|py| {
-            let list = PyList::new(py, &[2, 3, 5, 7]);
+            let list = PyList::new(py, [2, 3, 5, 7]);
             let obj = list.get_item(0);
             assert_eq!(obj.unwrap().extract::<i32>().unwrap(), 2);
         });
@@ -605,7 +601,7 @@ mod tests {
     #[test]
     fn test_list_get_item_unchecked_sanity() {
         Python::with_gil(|py| {
-            let list = PyList::new(py, &[2, 3, 5, 7]);
+            let list = PyList::new(py, [2, 3, 5, 7]);
             let obj = unsafe { list.get_item_unchecked(0) };
             assert_eq!(obj.extract::<i32>().unwrap(), 2);
         });
@@ -614,7 +610,7 @@ mod tests {
     #[test]
     fn test_list_index_trait() {
         Python::with_gil(|py| {
-            let list = PyList::new(py, &[2, 3, 5]);
+            let list = PyList::new(py, [2, 3, 5]);
             assert_eq!(2, list[0].extract::<i32>().unwrap());
             assert_eq!(3, list[1].extract::<i32>().unwrap());
             assert_eq!(5, list[2].extract::<i32>().unwrap());
@@ -625,7 +621,7 @@ mod tests {
     #[should_panic]
     fn test_list_index_trait_panic() {
         Python::with_gil(|py| {
-            let list = PyList::new(py, &[2, 3, 5]);
+            let list = PyList::new(py, [2, 3, 5]);
             let _ = &list[7];
         });
     }
@@ -633,7 +629,7 @@ mod tests {
     #[test]
     fn test_list_index_trait_ranges() {
         Python::with_gil(|py| {
-            let list = PyList::new(py, &[2, 3, 5]);
+            let list = PyList::new(py, [2, 3, 5]);
             assert_eq!(vec![3, 5], list[1..3].extract::<Vec<i32>>().unwrap());
             assert_eq!(Vec::<i32>::new(), list[3..3].extract::<Vec<i32>>().unwrap());
             assert_eq!(vec![3, 5], list[1..].extract::<Vec<i32>>().unwrap());
@@ -649,7 +645,7 @@ mod tests {
     #[should_panic = "range start index 5 out of range for list of length 3"]
     fn test_list_index_trait_range_panic_start() {
         Python::with_gil(|py| {
-            let list = PyList::new(py, &[2, 3, 5]);
+            let list = PyList::new(py, [2, 3, 5]);
             list[5..10].extract::<Vec<i32>>().unwrap();
         })
     }
@@ -658,7 +654,7 @@ mod tests {
     #[should_panic = "range end index 10 out of range for list of length 3"]
     fn test_list_index_trait_range_panic_end() {
         Python::with_gil(|py| {
-            let list = PyList::new(py, &[2, 3, 5]);
+            let list = PyList::new(py, [2, 3, 5]);
             list[1..10].extract::<Vec<i32>>().unwrap();
         })
     }
@@ -667,7 +663,7 @@ mod tests {
     #[should_panic = "slice index starts at 2 but ends at 1"]
     fn test_list_index_trait_range_panic_wrong_order() {
         Python::with_gil(|py| {
-            let list = PyList::new(py, &[2, 3, 5]);
+            let list = PyList::new(py, [2, 3, 5]);
             #[allow(clippy::reversed_empty_ranges)]
             list[2..1].extract::<Vec<i32>>().unwrap();
         })
@@ -677,7 +673,7 @@ mod tests {
     #[should_panic = "range start index 8 out of range for list of length 3"]
     fn test_list_index_trait_range_from_panic() {
         Python::with_gil(|py| {
-            let list = PyList::new(py, &[2, 3, 5]);
+            let list = PyList::new(py, [2, 3, 5]);
             list[8..].extract::<Vec<i32>>().unwrap();
         })
     }
@@ -685,7 +681,7 @@ mod tests {
     #[test]
     fn test_list_del_item() {
         Python::with_gil(|py| {
-            let list = PyList::new(py, &[1, 1, 2, 3, 5, 8]);
+            let list = PyList::new(py, [1, 1, 2, 3, 5, 8]);
             assert!(list.del_item(10).is_err());
             assert_eq!(1, list[0].extract::<i32>().unwrap());
             assert!(list.del_item(0).is_ok());
@@ -707,8 +703,8 @@ mod tests {
     #[test]
     fn test_list_set_slice() {
         Python::with_gil(|py| {
-            let list = PyList::new(py, &[1, 1, 2, 3, 5, 8]);
-            let ins = PyList::new(py, &[7, 4]);
+            let list = PyList::new(py, [1, 1, 2, 3, 5, 8]);
+            let ins = PyList::new(py, [7, 4]);
             list.set_slice(1, 4, ins).unwrap();
             assert_eq!([1, 7, 4, 5, 8], list.extract::<[i32; 5]>().unwrap());
             list.set_slice(3, 100, PyList::empty(py)).unwrap();
@@ -719,7 +715,7 @@ mod tests {
     #[test]
     fn test_list_del_slice() {
         Python::with_gil(|py| {
-            let list = PyList::new(py, &[1, 1, 2, 3, 5, 8]);
+            let list = PyList::new(py, [1, 1, 2, 3, 5, 8]);
             list.del_slice(1, 4).unwrap();
             assert_eq!([1, 5, 8], list.extract::<[i32; 3]>().unwrap());
             list.del_slice(1, 100).unwrap();
@@ -730,7 +726,7 @@ mod tests {
     #[test]
     fn test_list_contains() {
         Python::with_gil(|py| {
-            let list = PyList::new(py, &[1, 1, 2, 3, 5, 8]);
+            let list = PyList::new(py, [1, 1, 2, 3, 5, 8]);
             assert_eq!(6, list.len());
 
             let bad_needle = 7i32.to_object(py);
@@ -747,7 +743,7 @@ mod tests {
     #[test]
     fn test_list_index() {
         Python::with_gil(|py| {
-            let list = PyList::new(py, &[1, 1, 2, 3, 5, 8]);
+            let list = PyList::new(py, [1, 1, 2, 3, 5, 8]);
             assert_eq!(0, list.index(1i32).unwrap());
             assert_eq!(2, list.index(2i32).unwrap());
             assert_eq!(3, list.index(3i32).unwrap());
