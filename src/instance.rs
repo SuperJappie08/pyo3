@@ -5,9 +5,10 @@ use crate::gil;
 use crate::pycell::{PyBorrowError, PyBorrowMutError, PyCell};
 use crate::pyclass::boolean_struct::{False, True};
 use crate::types::{PyDict, PyString, PyTuple};
+use crate::weakref::PyWeak;
 use crate::{
-    ffi, AsPyPointer, FromPyObject, IntoPy, IntoPyPointer, PyAny, PyClass, PyClassInitializer,
-    PyRef, PyRefMut, PyTypeInfo, Python, ToPyObject,
+    ffi, intern, AsPyPointer, FromPyObject, IntoPy, IntoPyPointer, PyAny, PyClass,
+    PyClassInitializer, PyRef, PyRefMut, PyTypeInfo, Python, ToPyObject,
 };
 use std::marker::PhantomData;
 use std::mem;
@@ -524,6 +525,34 @@ impl<T> Py<T> {
         unsafe { ffi::Py_REFCNT(self.0.as_ptr()) }
     }
 
+    /// Gets the weakref count of the `ffi::PyObject` pointer.
+    /// 
+    /// FIXME: Docs do not line up with implementation.
+    /// Actually returns the amount of weakreference objects.
+    #[inline]
+    pub fn get_weak_refcnt(&self, py: Python<'_>) -> isize {
+        // TODO: This could be optimized
+        // There is a ffi::_PyWeakref_GetWeakrefCount which should get the pointer to the first reference in the weakref list
+        // However, I could not get this to work yet
+        #[cfg(not(PY_LIMITED_API))]
+        unsafe {
+            // Check if the object supports weakref, if it doesn't skip all the functions and return 0.
+            if ffi::PyType_SUPPORTS_WEAKREFS(ffi::Py_TYPE(self.as_ptr())) == 0 {
+                return 0;
+            }
+        }
+
+        // TODO: I think unwrapping is ok here, but I am not sure
+        py.import(intern!(py, "weakref"))
+            .unwrap()
+            .getattr(intern!(py, "getweakrefcount"))
+            .unwrap()
+            .call1((self,))
+            .unwrap()
+            .extract()
+            .unwrap()
+    }
+
     /// Makes a clone of `self`.
     ///
     /// This creates another pointer to the same object, increasing its reference count.
@@ -1025,6 +1054,37 @@ where
 impl<T> std::fmt::Debug for Py<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_tuple("Py").field(&self.0.as_ptr()).finish()
+    }
+}
+
+impl<T> Py<T>
+where
+    T: crate::impl_::pyclass::PyClassImpl<WeakRef = crate::impl_::pyclass::PyClassWeakRefSlot>,
+{
+    /// Downgrade the strong reference to a `weakref.ref`
+    pub fn downgrade(&self, py: Python<'_>) -> PyWeak<T> {
+        unsafe { PyWeak::from_owned_ptr(py, ffi::PyWeakref_NewRef(self.as_ptr(), ffi::Py_None())) }
+    }
+}
+
+impl Py<PyAny> {
+    /// Attempts to downgrade the strong reference to a `weakref.ref`
+    ///
+    /// This function fails if the Type fo the object referecened by the `PyAny` is not weakly referencable.
+    pub fn try_downgrade(&self, py: Python<'_>) -> PyResult<PyWeak<PyAny>> {
+        if unsafe { ffi::PyType_SUPPORTS_WEAKREFS(ffi::Py_TYPE(self.as_ptr())) != 0 } {
+            unsafe {
+                Ok(PyWeak::from_owned_ptr(
+                    py,
+                    ffi::PyWeakref_NewRef(self.as_ptr(), ffi::Py_None()),
+                ))
+            }
+        } else {
+            Err(crate::exceptions::PyTypeError::new_err(format!(
+                "cannot create weak reference to '{}' object",
+                self.getattr(py, crate::intern!(py, "__class__"))?
+            )))
+        }
     }
 }
 

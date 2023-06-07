@@ -399,6 +399,7 @@ pub mod buffer;
 pub mod callback;
 pub mod conversion;
 mod conversions;
+pub mod weakref;
 #[macro_use]
 #[doc(hidden)]
 pub mod derive_utils;

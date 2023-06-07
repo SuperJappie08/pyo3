@@ -113,3 +113,18 @@ pub unsafe fn PyObject_GET_WEAKREFS_LISTPTR(o: *mut PyObject) -> *mut *mut PyObj
     let weaklistoffset = (*Py_TYPE(o)).tp_weaklistoffset;
     o.offset(weaklistoffset) as *mut *mut PyObject
 }
+
+/// Get the weak count of the object.
+#[inline]
+#[cfg(all(not(any(Py_LIMITED_API, PyPy)), feature = "experimental-weakref"))]
+pub unsafe fn PyObject_GetWeakrefCount(o: *mut PyObject) -> Py_ssize_t {
+    // FIXME: SEGFAULT???
+    crate::_PyWeakref_GetWeakrefCount(PyObject_GET_WEAKREFS_LISTPTR(o).cast())
+}
+
+/// Get the weak count from the object the `weakref`, which referencing.
+#[inline]
+#[cfg(all(not(any(Py_LIMITED_API, PyPy)), feature = "experimental-weakref"))]
+pub unsafe fn PyWeakref_GetWeakrefCount(weakrefobject: *mut crate::PyWeakReference) -> Py_ssize_t {
+    PyObject_GetWeakrefCount(crate::PyWeakref_GetObject(weakrefobject.cast()))
+}

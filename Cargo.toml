@@ -66,6 +66,7 @@ default = ["macros"]
 # Enables pyo3::inspect module and additional type information on FromPyObject
 # and IntoPy traits
 experimental-inspect = []
+experimetnal-weakref = [ "pyo3-ffi/experimental-weakref"]
 
 # Enables macros: #[pyclass], #[pymodule], #[pyfunction] etc.
 macros = ["pyo3-macros", "indoc", "unindent"]
