@@ -679,12 +679,9 @@ impl<T> Py<T> {
         let attr_name = attr_name.into_py(py);
         let value = value.into_py(py);
 
-        unsafe {
-            err::error_on_minusone(
-                py,
-                ffi::PyObject_SetAttr(self.as_ptr(), attr_name.as_ptr(), value.as_ptr()),
-            )
-        }
+        err::error_on_minusone(py, unsafe {
+            ffi::PyObject_SetAttr(self.as_ptr(), attr_name.as_ptr(), value.as_ptr())
+        })
     }
 
     /// Calls the object.
@@ -1165,15 +1162,6 @@ impl PyObject {
         T: PyTryFrom<'p>,
     {
         <T as PyTryFrom<'_>>::try_from_unchecked(self.as_ref(py))
-    }
-
-    /// Casts the PyObject to a concrete Python object type.
-    #[deprecated(since = "0.18.0", note = "use downcast() instead")]
-    pub fn cast_as<'p, D>(&'p self, py: Python<'p>) -> Result<&'p D, PyDowncastError<'_>>
-    where
-        D: PyTryFrom<'p>,
-    {
-        self.downcast(py)
     }
 }
 

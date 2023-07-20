@@ -5,7 +5,6 @@
 fn test_compile_errors() {
     let t = trybuild::TestCases::new();
 
-    t.compile_fail("tests/ui/invalid_macro_args.rs");
     t.compile_fail("tests/ui/invalid_need_module_arg_position.rs");
     t.compile_fail("tests/ui/invalid_property_args.rs");
     t.compile_fail("tests/ui/invalid_proto_pymethods.rs");
@@ -37,5 +36,5 @@ fn test_compile_errors() {
     t.compile_fail("tests/ui/not_send.rs");
     t.compile_fail("tests/ui/not_send2.rs");
     t.compile_fail("tests/ui/get_set_all.rs");
-    t.compile_fail("tests/ui/traverse_bare_self.rs");
+    t.compile_fail("tests/ui/traverse.rs");
 }

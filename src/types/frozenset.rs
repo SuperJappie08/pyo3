@@ -2,11 +2,46 @@
 use crate::types::PyIterator;
 use crate::{
     err::{self, PyErr, PyResult},
-    IntoPyPointer, Py, PyObject,
+    Py, PyObject,
 };
 use crate::{ffi, AsPyPointer, PyAny, Python, ToPyObject};
 
 use std::ptr;
+
+/// Allows building a Python `frozenset` one item at a time
+pub struct PyFrozenSetBuilder<'py> {
+    py_frozen_set: &'py PyFrozenSet,
+}
+
+impl<'py> PyFrozenSetBuilder<'py> {
+    /// Create a new `FrozenSetBuilder`.
+    /// Since this allocates a `PyFrozenSet` internally it may
+    /// panic when running out of memory.
+    pub fn new(py: Python<'py>) -> PyResult<PyFrozenSetBuilder<'py>> {
+        Ok(PyFrozenSetBuilder {
+            py_frozen_set: PyFrozenSet::empty(py)?,
+        })
+    }
+
+    /// Adds an element to the set.
+    pub fn add<K>(&mut self, key: K) -> PyResult<()>
+    where
+        K: ToPyObject,
+    {
+        fn inner(frozenset: &PyFrozenSet, key: PyObject) -> PyResult<()> {
+            err::error_on_minusone(frozenset.py(), unsafe {
+                ffi::PySet_Add(frozenset.as_ptr(), key.as_ptr())
+            })
+        }
+
+        inner(self.py_frozen_set, key.to_object(self.py_frozen_set.py()))
+    }
+
+    /// Finish building the set and take ownership of its current value
+    pub fn finalize(self) -> &'py PyFrozenSet {
+        self.py_frozen_set
+    }
+}
 
 /// Represents a  Python `frozenset`
 #[repr(transparent)]
@@ -16,14 +51,14 @@ pub struct PyFrozenSet(PyAny);
 pyobject_native_type!(
     PyFrozenSet,
     ffi::PySetObject,
-    ffi::PyFrozenSet_Type,
+    pyobject_native_static_type_object!(ffi::PyFrozenSet_Type),
     #checkfunction=ffi::PyFrozenSet_Check
 );
 
 #[cfg(PyPy)]
 pyobject_native_type_core!(
     PyFrozenSet,
-    ffi::PyFrozenSet_Type,
+    pyobject_native_static_type_object!(ffi::PyFrozenSet_Type),
     #checkfunction=ffi::PyFrozenSet_Check
 );
 
@@ -62,13 +97,15 @@ impl PyFrozenSet {
     where
         K: ToPyObject,
     {
-        unsafe {
-            match ffi::PySet_Contains(self.as_ptr(), key.to_object(self.py()).as_ptr()) {
+        fn inner(frozenset: &PyFrozenSet, key: PyObject) -> PyResult<bool> {
+            match unsafe { ffi::PySet_Contains(frozenset.as_ptr(), key.as_ptr()) } {
                 1 => Ok(true),
                 0 => Ok(false),
-                _ => Err(PyErr::fetch(self.py())),
+                _ => Err(PyErr::fetch(frozenset.py())),
             }
         }
+
+        inner(self, key.to_object(self.py()))
     }
 
     /// Returns an iterator of values in this frozen set.
@@ -165,7 +202,7 @@ pub(crate) fn new_from_iter<T: ToPyObject>(
     py: Python<'_>,
     elements: impl IntoIterator<Item = T>,
 ) -> PyResult<Py<PyFrozenSet>> {
-    fn new_from_iter_inner(
+    fn inner(
         py: Python<'_>,
         elements: &mut dyn Iterator<Item = PyObject>,
     ) -> PyResult<Py<PyFrozenSet>> {
@@ -176,16 +213,14 @@ pub(crate) fn new_from_iter<T: ToPyObject>(
         let ptr = set.as_ptr();
 
         for obj in elements {
-            unsafe {
-                err::error_on_minusone(py, ffi::PySet_Add(ptr, obj.into_ptr()))?;
-            }
+            err::error_on_minusone(py, unsafe { ffi::PySet_Add(ptr, obj.as_ptr()) })?;
         }
 
         Ok(set)
     }
 
     let mut iter = elements.into_iter().map(|e| e.to_object(py));
-    new_from_iter_inner(py, &mut iter)
+    inner(py, &mut iter)
 }
 
 #[cfg(test)]
@@ -225,7 +260,7 @@ mod tests {
             let set = PyFrozenSet::new(py, &[1]).unwrap();
 
             // iter method
-            for el in set.iter() {
+            for el in set {
                 assert_eq!(1i32, el.extract::<i32>().unwrap());
             }
 
@@ -233,6 +268,27 @@ mod tests {
             for el in set {
                 assert_eq!(1i32, el.extract::<i32>().unwrap());
             }
+        });
+    }
+
+    #[test]
+    fn test_frozenset_builder() {
+        use super::PyFrozenSetBuilder;
+
+        Python::with_gil(|py| {
+            let mut builder = PyFrozenSetBuilder::new(py).unwrap();
+
+            // add an item
+            builder.add(1).unwrap();
+            builder.add(2).unwrap();
+            builder.add(2).unwrap();
+
+            // finalize it
+            let set = builder.finalize();
+
+            assert!(set.contains(1).unwrap());
+            assert!(set.contains(2).unwrap());
+            assert!(!set.contains(3).unwrap());
         });
     }
 }

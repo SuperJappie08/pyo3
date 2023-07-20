@@ -11,12 +11,7 @@
 //! [dependencies]
 //! # change * to the latest versions
 //! hashbrown = "*"
-// workaround for `extended_key_value_attributes`: https://github.com/rust-lang/rust/issues/82768#issuecomment-803935643
-#![cfg_attr(docsrs, cfg_attr(docsrs, doc = concat!("pyo3 = { version = \"", env!("CARGO_PKG_VERSION"),  "\", features = [\"hashbrown\"] }")))]
-#![cfg_attr(
-    not(docsrs),
-    doc = "pyo3 = { version = \"*\", features = [\"hashbrown\"] }"
-)]
+#![doc = concat!("pyo3 = { version = \"", env!("CARGO_PKG_VERSION"),  "\", features = [\"hashbrown\"] }")]
 //! ```
 //!
 //! Note that you must use compatible versions of hashbrown and PyO3.
@@ -62,7 +57,7 @@ where
     fn extract(ob: &'source PyAny) -> Result<Self, PyErr> {
         let dict: &PyDict = ob.downcast()?;
         let mut ret = hashbrown::HashMap::with_capacity_and_hasher(dict.len(), S::default());
-        for (k, v) in dict.iter() {
+        for (k, v) in dict {
             ret.insert(K::extract(k)?, V::extract(v)?);
         }
         Ok(ret)

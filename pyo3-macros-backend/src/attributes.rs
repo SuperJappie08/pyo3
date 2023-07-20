@@ -146,18 +146,10 @@ pub type FromPyWithAttribute = KeywordAttribute<kw::from_py_with, LitStrValue<Ex
 pub type CrateAttribute = KeywordAttribute<Token![crate], LitStrValue<Path>>;
 
 pub fn get_pyo3_options<T: Parse>(attr: &syn::Attribute) -> Result<Option<Punctuated<T, Comma>>> {
-    if is_attribute_ident(attr, "pyo3") {
+    if attr.path().is_ident("pyo3") {
         attr.parse_args_with(Punctuated::parse_terminated).map(Some)
     } else {
         Ok(None)
-    }
-}
-
-pub fn is_attribute_ident(attr: &syn::Attribute, name: &str) -> bool {
-    if let Some(path_segment) = attr.path.segments.last() {
-        attr.path.segments.len() == 1 && path_segment.ident == name
-    } else {
-        false
     }
 }
 
@@ -187,7 +179,7 @@ pub fn take_pyo3_options<T: Parse>(attrs: &mut Vec<syn::Attribute>) -> Result<Ve
     let mut out = Vec::new();
     take_attributes(attrs, |attr| {
         if let Some(options) = get_pyo3_options(attr)? {
-            out.extend(options.into_iter());
+            out.extend(options);
             Ok(true)
         } else {
             Ok(false)

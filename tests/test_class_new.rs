@@ -2,6 +2,7 @@
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+use pyo3::sync::GILOnceCell;
 use pyo3::types::IntoPyDict;
 
 #[pyclass]
@@ -81,14 +82,14 @@ fn tuple_class_with_new() {
 #[pyclass]
 #[derive(Debug)]
 struct NewWithOneArg {
-    _data: i32,
+    data: i32,
 }
 
 #[pymethods]
 impl NewWithOneArg {
     #[new]
     fn new(arg: i32) -> NewWithOneArg {
-        NewWithOneArg { _data: arg }
+        NewWithOneArg { data: arg }
     }
 }
 
@@ -99,14 +100,14 @@ fn new_with_one_arg() {
         let wrp = typeobj.call((42,), None).unwrap();
         let obj = wrp.downcast::<PyCell<NewWithOneArg>>().unwrap();
         let obj_ref = obj.borrow();
-        assert_eq!(obj_ref._data, 42);
+        assert_eq!(obj_ref.data, 42);
     });
 }
 
 #[pyclass]
 struct NewWithTwoArgs {
-    _data1: i32,
-    _data2: i32,
+    data1: i32,
+    data2: i32,
 }
 
 #[pymethods]
@@ -114,8 +115,8 @@ impl NewWithTwoArgs {
     #[new]
     fn new(arg1: i32, arg2: i32) -> Self {
         NewWithTwoArgs {
-            _data1: arg1,
-            _data2: arg2,
+            data1: arg1,
+            data2: arg2,
         }
     }
 }
@@ -130,8 +131,8 @@ fn new_with_two_args() {
             .unwrap();
         let obj = wrp.downcast::<PyCell<NewWithTwoArgs>>().unwrap();
         let obj_ref = obj.borrow();
-        assert_eq!(obj_ref._data1, 10);
-        assert_eq!(obj_ref._data2, 20);
+        assert_eq!(obj_ref.data1, 10);
+        assert_eq!(obj_ref.data2, 20);
     });
 }
 
@@ -202,5 +203,64 @@ fn new_with_custom_error() {
         let typeobj = py.get_type::<NewWithCustomError>();
         let err = typeobj.call0().unwrap_err();
         assert_eq!(err.to_string(), "ValueError: custom error");
+    });
+}
+
+#[pyclass]
+struct NewExisting {
+    #[pyo3(get)]
+    num: usize,
+}
+
+#[pymethods]
+impl NewExisting {
+    #[new]
+    fn new(py: pyo3::Python<'_>, val: usize) -> pyo3::Py<NewExisting> {
+        static PRE_BUILT: GILOnceCell<[pyo3::Py<NewExisting>; 2]> = GILOnceCell::new();
+        let existing = PRE_BUILT.get_or_init(py, || {
+            [
+                pyo3::PyCell::new(py, NewExisting { num: 0 })
+                    .unwrap()
+                    .into(),
+                pyo3::PyCell::new(py, NewExisting { num: 1 })
+                    .unwrap()
+                    .into(),
+            ]
+        });
+
+        if val < existing.len() {
+            return existing[val].clone_ref(py);
+        }
+
+        pyo3::PyCell::new(py, NewExisting { num: val })
+            .unwrap()
+            .into()
+    }
+}
+
+#[test]
+fn test_new_existing() {
+    Python::with_gil(|py| {
+        let typeobj = py.get_type::<NewExisting>();
+
+        let obj1 = typeobj.call1((0,)).unwrap();
+        let obj2 = typeobj.call1((0,)).unwrap();
+        let obj3 = typeobj.call1((1,)).unwrap();
+        let obj4 = typeobj.call1((1,)).unwrap();
+        let obj5 = typeobj.call1((2,)).unwrap();
+        let obj6 = typeobj.call1((2,)).unwrap();
+
+        assert!(obj1.getattr("num").unwrap().extract::<u32>().unwrap() == 0);
+        assert!(obj2.getattr("num").unwrap().extract::<u32>().unwrap() == 0);
+        assert!(obj3.getattr("num").unwrap().extract::<u32>().unwrap() == 1);
+        assert!(obj4.getattr("num").unwrap().extract::<u32>().unwrap() == 1);
+        assert!(obj5.getattr("num").unwrap().extract::<u32>().unwrap() == 2);
+        assert!(obj6.getattr("num").unwrap().extract::<u32>().unwrap() == 2);
+
+        assert!(obj1.is(obj2));
+        assert!(obj3.is(obj4));
+        assert!(!obj1.is(obj3));
+        assert!(!obj1.is(obj5));
+        assert!(!obj5.is(obj6));
     });
 }

@@ -139,7 +139,7 @@
 //! [package]
 //! name = "string-sum"
 //! version = "0.1.0"
-//! edition = "2018"
+//! edition = "2021"
 //!
 //! [lib]
 //! name = "string_sum"
@@ -151,9 +151,7 @@
 //! crate-type = ["cdylib"]
 //!
 //! [dependencies.pyo3]
-// workaround for `extended_key_value_attributes`: https://github.com/rust-lang/rust/issues/82768#issuecomment-803935643
-#![cfg_attr(docsrs, cfg_attr(docsrs, doc = concat!("version = \"", env!("CARGO_PKG_VERSION"),  "\"")))]
-#![cfg_attr(not(docsrs), doc = "version = \"*\"")]
+#![doc = concat!("version = \"", env!("CARGO_PKG_VERSION"),  "\"")]
 //! features = ["extension-module"]
 //! ```
 //!
@@ -214,9 +212,7 @@
 //! Start a new project with `cargo new` and add  `pyo3` to the `Cargo.toml` like this:
 //! ```toml
 //! [dependencies.pyo3]
-// workaround for `extended_key_value_attributes`: https://github.com/rust-lang/rust/issues/82768#issuecomment-803935643
-#![cfg_attr(docsrs, cfg_attr(docsrs, doc = concat!("version = \"", env!("CARGO_PKG_VERSION"),  "\"")))]
-#![cfg_attr(not(docsrs), doc = "version = \"*\"")]
+#![doc = concat!("version = \"", env!("CARGO_PKG_VERSION"),  "\"")]
 //! # this is necessary to automatically initialize the Python interpreter
 //! features = ["auto-initialize"]
 //! ```
@@ -440,7 +436,7 @@ pub use pyo3_macros::{pyfunction, pymethods, pymodule, FromPyObject};
 
 /// A proc macro used to expose Rust structs and fieldless enums as Python objects.
 ///
-#[cfg_attr(docsrs, cfg_attr(docsrs, doc = include_str!("../guide/pyclass_parameters.md")))]
+#[doc = include_str!("../guide/pyclass_parameters.md")]
 ///
 /// For more on creating Python classes,
 /// see the [class section of the guide][1].
@@ -464,16 +460,12 @@ pub mod inspect;
 /// Test readme and user guide
 #[cfg(doctest)]
 pub mod doc_test {
-    macro_rules! doctest_impl {
-        ($doc:expr, $mod:ident) => {
-            #[doc = $doc]
-            mod $mod {}
-        };
-    }
-
     macro_rules! doctests {
         ($($path:expr => $mod:ident),* $(,)?) => {
-            $(doctest_impl!(include_str!(concat!("../", $path)), $mod);)*
+            $(
+                #[doc = include_str!(concat!("../", $path))]
+                mod $mod{}
+            )*
         };
     }
 
@@ -505,6 +497,7 @@ pub mod doc_test {
         "guide/src/migration.md" => guide_migration_md,
         "guide/src/module.md" => guide_module_md,
         "guide/src/parallelism.md" => guide_parallelism_md,
+        "guide/src/performance.md" => guide_performance_md,
         "guide/src/python_from_rust.md" => guide_python_from_rust_md,
         "guide/src/python_typing_hints.md" => guide_python_typing_hints_md,
         "guide/src/rust_cpython.md" => guide_rust_cpython_md,

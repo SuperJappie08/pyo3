@@ -2,7 +2,7 @@
 use crate::types::PyIterator;
 use crate::{
     err::{self, PyErr, PyResult},
-    IntoPyPointer, Py,
+    Py,
 };
 use crate::{ffi, AsPyPointer, PyAny, PyObject, Python, ToPyObject};
 use std::ptr;
@@ -15,14 +15,14 @@ pub struct PySet(PyAny);
 pyobject_native_type!(
     PySet,
     ffi::PySetObject,
-    ffi::PySet_Type,
+    pyobject_native_static_type_object!(ffi::PySet_Type),
     #checkfunction=ffi::PySet_Check
 );
 
 #[cfg(PyPy)]
 pyobject_native_type_core!(
     PySet,
-    ffi::PySet_Type,
+    pyobject_native_static_type_object!(ffi::PySet_Type),
     #checkfunction=ffi::PySet_Check
 );
 
@@ -71,23 +71,33 @@ impl PySet {
     where
         K: ToPyObject,
     {
-        unsafe {
-            match ffi::PySet_Contains(self.as_ptr(), key.to_object(self.py()).as_ptr()) {
+        fn inner(set: &PySet, key: PyObject) -> PyResult<bool> {
+            match unsafe { ffi::PySet_Contains(set.as_ptr(), key.as_ptr()) } {
                 1 => Ok(true),
                 0 => Ok(false),
-                _ => Err(PyErr::fetch(self.py())),
+                _ => Err(PyErr::fetch(set.py())),
             }
         }
+
+        inner(self, key.to_object(self.py()))
     }
 
     /// Removes the element from the set if it is present.
-    pub fn discard<K>(&self, key: K)
+    ///
+    /// Returns `true` if the element was present in the set.
+    pub fn discard<K>(&self, key: K) -> PyResult<bool>
     where
         K: ToPyObject,
     {
-        unsafe {
-            ffi::PySet_Discard(self.as_ptr(), key.to_object(self.py()).as_ptr());
+        fn inner(set: &PySet, key: PyObject) -> PyResult<bool> {
+            match unsafe { ffi::PySet_Discard(set.as_ptr(), key.as_ptr()) } {
+                1 => Ok(true),
+                0 => Ok(false),
+                _ => Err(PyErr::fetch(set.py())),
+            }
         }
+
+        inner(self, key.to_object(self.py()))
     }
 
     /// Adds an element to the set.
@@ -95,12 +105,13 @@ impl PySet {
     where
         K: ToPyObject,
     {
-        unsafe {
-            err::error_on_minusone(
-                self.py(),
-                ffi::PySet_Add(self.as_ptr(), key.to_object(self.py()).as_ptr()),
-            )
+        fn inner(set: &PySet, key: PyObject) -> PyResult<()> {
+            err::error_on_minusone(set.py(), unsafe {
+                ffi::PySet_Add(set.as_ptr(), key.as_ptr())
+            })
         }
+
+        inner(self, key.to_object(self.py()))
     }
 
     /// Removes and returns an arbitrary element from the set.
@@ -238,10 +249,7 @@ pub(crate) fn new_from_iter<T: ToPyObject>(
     py: Python<'_>,
     elements: impl IntoIterator<Item = T>,
 ) -> PyResult<Py<PySet>> {
-    fn new_from_iter_inner(
-        py: Python<'_>,
-        elements: &mut dyn Iterator<Item = PyObject>,
-    ) -> PyResult<Py<PySet>> {
+    fn inner(py: Python<'_>, elements: &mut dyn Iterator<Item = PyObject>) -> PyResult<Py<PySet>> {
         let set: Py<PySet> = unsafe {
             // We create the  `Py` pointer because its Drop cleans up the set if user code panics.
             Py::from_owned_ptr_or_err(py, ffi::PySet_New(std::ptr::null_mut()))?
@@ -249,16 +257,14 @@ pub(crate) fn new_from_iter<T: ToPyObject>(
         let ptr = set.as_ptr();
 
         for obj in elements {
-            unsafe {
-                err::error_on_minusone(py, ffi::PySet_Add(ptr, obj.into_ptr()))?;
-            }
+            err::error_on_minusone(py, unsafe { ffi::PySet_Add(ptr, obj.as_ptr()) })?;
         }
 
         Ok(set)
     }
 
     let mut iter = elements.into_iter().map(|e| e.to_object(py));
-    new_from_iter_inner(py, &mut iter)
+    inner(py, &mut iter)
 }
 
 #[cfg(test)]
@@ -322,10 +328,14 @@ mod tests {
     fn test_set_discard() {
         Python::with_gil(|py| {
             let set = PySet::new(py, &[1]).unwrap();
-            set.discard(2);
+            assert!(!set.discard(2).unwrap());
             assert_eq!(1, set.len());
-            set.discard(1);
+
+            assert!(set.discard(1).unwrap());
             assert_eq!(0, set.len());
+            assert!(!set.discard(1).unwrap());
+
+            assert!(set.discard(vec![1, 2]).is_err());
         });
     }
 
@@ -358,7 +368,7 @@ mod tests {
             let set = PySet::new(py, &[1]).unwrap();
 
             // iter method
-            for el in set.iter() {
+            for el in set {
                 assert_eq!(1i32, el.extract::<'_, i32>().unwrap());
             }
 

@@ -1,6 +1,6 @@
 [package]
 name = "pyo3-macros"
-version = "0.19.0"
+version = "0.19.1"
 description = "Proc macros for PyO3 package"
 authors = ["PyO3 Project and Contributors <https://github.com/PyO3>"]
 keywords = ["pyo3", "python", "cpython", "ffi"]
@@ -8,7 +8,7 @@ homepage = "https://github.com/pyo3/pyo3"
 repository = "https://github.com/pyo3/pyo3"
 categories = ["api-bindings", "development-tools::ffi"]
 license = "Apache-2.0"
-edition = "2018"
+edition = "2021"
 
 [lib]
 proc-macro = true
@@ -21,5 +21,5 @@ abi3 = ["pyo3-macros-backend/abi3"]
 [dependencies]
 proc-macro2 = { version = "1", default-features = false }
 quote = "1"
-syn = { version = "1.0.85", features = ["full", "extra-traits"] }
-pyo3-macros-backend = { path = "../pyo3-macros-backend", version = "=0.19.0" }
+syn = { version = "2", features = ["full", "extra-traits"] }
+pyo3-macros-backend = { path = "../pyo3-macros-backend", version = "=0.19.1" }

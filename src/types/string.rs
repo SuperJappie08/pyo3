@@ -127,7 +127,7 @@ impl<'a> PyStringData<'a> {
 #[repr(transparent)]
 pub struct PyString(PyAny);
 
-pyobject_native_type_core!(PyString, ffi::PyUnicode_Type, #checkfunction=ffi::PyUnicode_Check);
+pyobject_native_type_core!(PyString, pyobject_native_static_type_object!(ffi::PyUnicode_Type), #checkfunction=ffi::PyUnicode_Check);
 
 impl PyString {
     /// Creates a new Python string object.
@@ -296,7 +296,7 @@ mod tests {
     #[test]
     fn test_to_str_surrogate() {
         Python::with_gil(|py| {
-            let obj: PyObject = py.eval(r#"'\ud800'"#, None, None).unwrap().into();
+            let obj: PyObject = py.eval(r"'\ud800'", None, None).unwrap().into();
             let py_string: &PyString = obj.downcast(py).unwrap();
             assert!(py_string.to_str().is_err());
         })
@@ -316,7 +316,7 @@ mod tests {
     fn test_to_string_lossy() {
         Python::with_gil(|py| {
             let obj: PyObject = py
-                .eval(r#"'🐈 Hello \ud800World'"#, None, None)
+                .eval(r"'🐈 Hello \ud800World'", None, None)
                 .unwrap()
                 .into();
             let py_string: &PyString = obj.downcast(py).unwrap();
