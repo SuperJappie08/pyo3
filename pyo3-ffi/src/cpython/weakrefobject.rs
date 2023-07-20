@@ -23,5 +23,5 @@ extern "C" {
     /// Argument `_head`: start of list
     ///
     /// Because the pointer needs to be the head of the list, this is wrapped to external functions, due to lack of documentation.
-    pub fn _PyWeakref_GetWeakrefCount(_head: *mut _PyWeakReference) -> crate::Py_ssize_t;
+    pub fn _PyWeakref_GetWeakrefCount(_head: *mut crate::PyObject) -> crate::Py_ssize_t;
 }

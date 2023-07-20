@@ -2,10 +2,32 @@
 use std::{marker::PhantomData, mem, ptr::NonNull};
 
 use crate::{
-    err, ffi, gil,
-    types::{PyDict, PyString, PyTuple},
+    err, ffi, gil, intern,
+    types::{PyDict, PyList, PyString, PyTuple},
     AsPyPointer, IntoPy, IntoPyPointer, Py, PyAny, PyErr, PyObject, PyResult, Python, ToPyObject,
 };
+
+pub(crate) mod internal {
+    use crate::ffi;
+
+    /// obj should support weakref
+    ///
+    #[cfg(not(Py_LIMITED_API))]
+    pub unsafe fn get_weakrefcnt(obj: *mut ffi::PyObject) -> isize {
+        let mut total = 0;
+        let mut weak_ptr = *ffi::PyObject_GET_WEAKREFS_LISTPTR(obj);
+
+        while !(weak_ptr.is_null() || ffi::Py_IsNone(weak_ptr) > 0) {
+            total += ffi::Py_REFCNT(weak_ptr);
+            weak_ptr = (weak_ptr as *mut ffi::PyWeakReference)
+                .read()
+                .wr_next
+                .cast();
+        }
+
+        total
+    }
+}
 
 /// A representation of a Python [`weakref.ref`](https://docs.python.org/3/library/weakref.html?highlight=weakref#weakref.ref).
 ///
@@ -35,9 +57,95 @@ impl<T> PyWeak<T> {
     }
 
     /// Get the weakeref count to the current object
-    pub fn get_weak_refcnt(&self, _py: Python<'_>) -> isize {
+    pub fn get_weakrefcnt(&self, py: Python<'_>) -> isize {
         // (Most)Weakrefs are not weakreferenceble
-        0
+        // TODO: This is only true for default weakref types, types that inherit from weakref can be weakreferenced
+        #[cfg(not(Py_LIMITED_API))]
+        unsafe {
+            // Check if the object supports weakref, if it doesn't skip all the functions and return 0.
+            if ffi::PyType_SUPPORTS_WEAKREFS(ffi::Py_TYPE(self.as_ptr())) == 0 {
+                return 0;
+            }
+        }
+
+        unsafe {
+            let obj = Py::<PyAny>::from_borrowed_ptr(py, self.as_ptr()); // Was owned
+            let result = obj.get_weakrefcnt(py);
+            // mem::forget(obj)
+            result
+        }
+
+        // let ref_objs = self.get_weakref_objlist(py);
+
+        // if ref_objs.is_empty() {
+        //     0
+        // } else {
+        //     ref_objs
+        //         .into_iter()
+        //         .map(|obj| (obj.get_refcnt() - 1)) // Subtract 2, once for the pylist instance, once for the into_iter instance?
+        //         .sum::<isize>()
+        //         - 1 // One object referenced in the object
+        // }
+    }
+
+    pub fn get_weakref_objcnt(&self, py: Python<'_>) -> isize {
+        // TODO: This could be optimized
+        // There is a ffi::_PyWeakref_GetWeakrefCount which should get the pointer to the first reference in the weakref list
+        // However, I could not get this to work yet
+        #[cfg(not(Py_LIMITED_API))]
+        unsafe {
+            // Check if the object supports weakref, if it doesn't skip all the functions and return 0.
+            if ffi::PyType_SUPPORTS_WEAKREFS(ffi::Py_TYPE(self.as_ptr())) == 0 {
+                return 0;
+            }
+        }
+
+        unsafe {
+            let obj = Py::<PyAny>::from_owned_ptr(py, self.as_ptr());
+            let result = obj.get_weakref_objcnt(py);
+            mem::forget(obj);
+            result
+        }
+
+        // // TODO: I think unwrapping is ok here, but I am not sure
+        // py.import(intern!(py, "weakref"))
+        //     .unwrap()
+        //     .getattr(intern!(py, "getweakrefcount"))
+        //     .unwrap()
+        //     .call1((self,))
+        //     .unwrap()
+        //     .extract()
+        //     .unwrap()
+    }
+
+    pub fn get_weakref_objlist<'py>(&self, py: Python<'py>) -> &'py PyList {
+        // TODO: This could be optimized
+        // There is a ffi::_PyWeakref_GetWeakrefCount which should get the pointer to the first reference in the weakref list
+        // However, I could not get this to work yet
+        #[cfg(not(Py_LIMITED_API))]
+        unsafe {
+            // Check if the object supports weakref, if it doesn't skip all the functions and return 0.
+            if ffi::PyType_SUPPORTS_WEAKREFS(ffi::Py_TYPE(self.as_ptr())) == 0 {
+                return PyList::empty(py);
+            }
+        }
+
+        // // TODO: I think unwrapping is ok here, but I am not sure
+        // py.import(intern!(py, "weakref"))
+        //     .unwrap()
+        //     .getattr(intern!(py, "getweakrefs"))
+        //     .unwrap()
+        //     .call1((self,))
+        //     .unwrap()
+        //     .extract()
+        //     .unwrap()
+
+        unsafe {
+            let obj = Py::<PyAny>::from_owned_ptr(py, self.as_ptr());
+            let result = obj.get_weakref_objlist(py);
+            mem::forget(obj);
+            result
+        }
     }
 
     /// Makes a clone of `self`.
@@ -75,7 +183,7 @@ impl<T> PyWeak<T> {
     ///     # assert_eq!(first_weak.ref_weak_count(py), 1);
     ///     # assert_eq!(first_weak.ref_strong_count(py), 2);
     ///     # assert_eq!(first_weak.get_refcnt(py), 1);
-    ///     # assert_eq!(first_weak.get_weak_refcnt(py), 0);
+    ///     # assert_eq!(first_weak.get_weakrefcnt(py), 0);
     ///     # assert_eq!(second.as_ref(py).borrow().name, "Joe".to_owned());
     ///     # assert_eq!(second.as_ref(py).borrow().age, 42);
     /// });
@@ -432,28 +540,29 @@ where
         }
     }
 
-    /// Gets the count of weak refences to the referenced object.
-    /// 
+    /// Gets the refcount of weak refences to the referenced object.
+    ///
     /// FIXME: Docs do not line up with implementation.
     /// Actually returns the amount of weakreference objects.
     pub fn ref_weak_count(&self, py: Python<'_>) -> isize {
         match self.upgrade(py) {
-            Some(obj) => obj.get_weak_refcnt(py),
+            Some(obj) => obj.get_weakrefcnt(py),
             None => 0,
         }
     }
 
     /// Upgrades the `PyWeak<T>` to a `Py<T>`.
     pub fn upgrade(&self, py: Python<'_>) -> Option<Py<T>> {
-        // Theory FIXME: This dows not work, since the pointer to PyNone is not null
-        let object = NonNull::new(unsafe { ffi::PyWeakref_GetObject(self.as_ptr()) });
+        // This theoretically cannot fail, since `ffi::PyWeakref_GetObject` returns `Py_None` if not ok.
+        let object: Option<NonNull<pyo3_ffi::PyObject>> =
+            NonNull::new(unsafe { ffi::PyWeakref_GetObject(self.as_ptr()) });
 
         match object {
-            Some(ptr) => {
-                // unsafe { ffi::Py_IncRef(ptr.as_ptr()) };
+            // Need to check if the Object has been removed and None is returned
+            Some(ptr) if unsafe { ffi::Py_IsNone(ptr.as_ptr()) == 0 } => {
                 Some(unsafe { Py::from_borrowed_ptr(py, ptr.as_ptr()) })
             }
-            None => None,
+            _ => None,
         }
     }
 }
@@ -470,9 +579,7 @@ impl<T> IntoPy<PyObject> for PyWeak<T> {
     /// Consumes `self` without calling `Py_DECREF()`.
     #[inline]
     fn into_py(self, py: Python<'_>) -> PyObject {
-        // TODO: Feels a little over thing
-        unsafe { PyObject::from_owned_ptr(py, self.as_ptr()) }
-        // unsafe { PyObject::from_non_null(self.into_non_null()) }
+        unsafe { PyObject::from_owned_ptr(py, self.into_ptr()) }
     }
 }
 
@@ -550,17 +657,33 @@ mod py_weak {
             .unwrap()
         });
 
+        let weak1 = Python::with_gil(|py| strong.downgrade(py));
+
         Python::with_gil(|py| {
-            let weak1: PyWeak<MyClass> = strong.downgrade(py);
-            assert_eq!(strong.get_weak_refcnt(py), 1);
+            assert_eq!(strong.get_refcnt(py), 1);
+            assert_eq!(strong.get_weakrefcnt(py), 1);
+            // 1x in Strong, 1x in Rust.. No not actually, there is one in the list, which should be dropped
+            assert_eq!(weak1.get_refcnt(py), 1);
             assert_eq!(weak1.ref_weak_count(py), 1);
 
+            let weak2: PyWeak<MyClass> = strong.downgrade(py);
+            assert_eq!(strong.get_refcnt(py), 1);
+            {
+                assert_eq!(strong.get_weakref_objcnt(py), 1);
+            }
+            assert_eq!(strong.get_weakrefcnt(py), 2);
+            // weak2 is the same object as weak1, as a result of pythons design
+            assert_eq!(weak2.get_refcnt(py), 2);
+            assert_eq!(weak2.ref_weak_count(py), 2);
+
             let weak1b = strong.downgrade(py);
-            assert_eq!(weak1b.ref_weak_count(py), 2);
+            assert_eq!(weak1b.ref_weak_count(py), 3);
 
             // This does not increase the weakcount of `strong`, since their is not a new weakref created
-            let weak2 = weak1.clone_ref(py);
-            assert_eq!(weak2.ref_weak_count(py), 2);
+            let weak2 = weak2.clone_ref(py);
+            // Why FIXME: 4?
+            assert_eq!(weak2.ref_weak_count(py), 4);
+            py.run("print('test_weakref_cnt')", None, None).unwrap();
         })
     }
 
@@ -636,6 +759,7 @@ mod py_weak {
             );
 
             assert_eq!(obj_ref.get_refcnt(py), 2);
+            py.run("print('test_py_weak_refcnt_increase_none_clone')", None, None).unwrap();
         });
     }
 
@@ -659,12 +783,15 @@ mod py_weak {
             assert!(first_weak.upgrade(py).unwrap().is(&second));
             assert_eq!(first.get_refcnt(py), 2);
             assert_eq!(second.get_refcnt(py), 2);
+            assert_eq!(first.get_weakrefcnt(py), 1);
+            assert_eq!(first.get_weakref_objcnt(py), 1);
             assert_eq!(first_weak.ref_weak_count(py), 1);
             assert_eq!(first_weak.ref_strong_count(py), 2);
             assert_eq!(first_weak.get_refcnt(py), 1);
-            assert_eq!(first_weak.get_weak_refcnt(py), 0);
+            assert_eq!(first_weak.get_weakrefcnt(py), 0);
             assert_eq!(second.borrow(py).name, "Joe".to_owned());
             assert_eq!(second.borrow(py).age, 42);
+            py.run("print('test_seg_fault')", None, None).unwrap();
         });
     }
 }

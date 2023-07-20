@@ -1,14 +1,15 @@
 use crate::conversion::PyTryFrom;
 use crate::err::{self, PyDowncastError, PyErr, PyResult};
-use crate::gil;
+use crate::exceptions::PyReferenceError;
 use crate::pycell::{PyBorrowError, PyBorrowMutError, PyCell};
 use crate::pyclass::boolean_struct::{False, True};
-use crate::types::{PyDict, PyString, PyTuple};
+use crate::types::{PyDict, PyList, PyString, PyTuple};
 use crate::weakref::PyWeak;
 use crate::{
     ffi, intern, AsPyPointer, FromPyObject, IntoPy, IntoPyPointer, PyAny, PyClass,
     PyClassInitializer, PyRef, PyRefMut, PyTypeInfo, Python, ToPyObject,
 };
+use crate::{gil, weakref};
 use std::marker::PhantomData;
 use std::mem;
 use std::ptr::NonNull;
@@ -525,15 +526,14 @@ impl<T> Py<T> {
     }
 
     /// Gets the weakref count of the `ffi::PyObject` pointer.
-    /// 
+    ///
     /// FIXME: Docs do not line up with implementation.
-    /// Actually returns the amount of weakreference objects.
     #[inline]
-    pub fn get_weak_refcnt(&self, py: Python<'_>) -> isize {
+    pub fn get_weakrefcnt(&self, py: Python<'_>) -> isize {
         // TODO: This could be optimized
         // There is a ffi::_PyWeakref_GetWeakrefCount which should get the pointer to the first reference in the weakref list
         // However, I could not get this to work yet
-        #[cfg(not(PY_LIMITED_API))]
+        #[cfg(not(Py_LIMITED_API))]
         unsafe {
             // Check if the object supports weakref, if it doesn't skip all the functions and return 0.
             if ffi::PyType_SUPPORTS_WEAKREFS(ffi::Py_TYPE(self.as_ptr())) == 0 {
@@ -541,10 +541,84 @@ impl<T> Py<T> {
             }
         }
 
+        #[cfg(not(Py_LIMITED_API))]
+        unsafe {
+            weakref::internal::get_weakrefcnt(self.as_ptr())
+        }
+
+        // FIXME: THIS DOES NOT WORK
+        // TODO: not stable api option not working
+        #[cfg(Py_LIMITED_API)]
+        {
+            let ref_objs = self.get_weakref_objlist(py);
+            // Minus one for the something
+            // In live interp it is 3
+            let result: isize = ref_objs.iter().map(|obj| obj.get_refcnt() - 2).sum();
+
+            result
+        }
+
+        // if ref_objs.is_empty() {
+        //     0
+        // } else {
+        //     ref_objs
+        //         .into_iter()
+        //         .map(|obj| (obj.get_refcnt() - 1)) // Subtract once for the pylist instance
+        //         .sum::<isize>()
+        //         - 1 // One object referenced in the object
+        // }
+    }
+
+    /// Gets the amount of weakref objects refering to this object.
+    ///
+    /// This is equivelent to Pythons `weakref.getweakrefcount`
+    pub fn get_weakref_objcnt(&self, py: Python<'_>) -> isize {
+        // TODO: This could be optimized
+        // There is a ffi::_PyWeakref_GetWeakrefCount which should get the pointer to the first reference in the weakref list
+        // However, I could not get this to work yet
+        #[cfg(not(Py_LIMITED_API))]
+        unsafe {
+            // Check if the object supports weakref, if it doesn't skip all the functions and return 0.
+            if ffi::PyType_SUPPORTS_WEAKREFS(ffi::Py_TYPE(self.as_ptr())) == 0 {
+                return 0;
+            }
+        }
+
+        #[cfg(all(not(Py_LIMITED_API), feature = "experimental-weakref"))]
+        {
+            unsafe { ffi::PyObject_GetWeakrefCount(self.as_ptr()) }
+        }
+
+        #[cfg(not(all(not(Py_LIMITED_API), feature = "experimental-weakref")))]
+        {
+            // TODO: I think unwrapping is ok here, but I am not sure
+            py.import(intern!(py, "weakref"))
+                .unwrap()
+                .getattr(intern!(py, "getweakrefcount"))
+                .unwrap()
+                .call1((self,))
+                .unwrap()
+                .extract()
+                .unwrap()
+        }
+    }
+
+    pub fn get_weakref_objlist<'py>(&self, py: Python<'py>) -> &'py PyList {
+        // TODO: This could be optimized
+        // There is a ffi::_PyWeakref_GetWeakrefCount which should get the pointer to the first reference in the weakref list
+        // However, I could not get this to work yet
+        #[cfg(not(Py_LIMITED_API))]
+        unsafe {
+            // Check if the object supports weakref, if it doesn't skip all the functions and return 0.
+            if ffi::PyType_SUPPORTS_WEAKREFS(ffi::Py_TYPE(self.as_ptr())) == 0 {
+                return PyList::empty(py);
+            }
+        }
+
         // TODO: I think unwrapping is ok here, but I am not sure
         py.import(intern!(py, "weakref"))
             .unwrap()
-            .getattr(intern!(py, "getweakrefcount"))
+            .getattr(intern!(py, "getweakrefs"))
             .unwrap()
             .call1((self,))
             .unwrap()
@@ -1068,6 +1142,7 @@ impl Py<PyAny> {
     ///
     /// This function fails if the Type fo the object referecened by the `PyAny` is not weakly referencable.
     pub fn try_downgrade(&self, py: Python<'_>) -> PyResult<PyWeak<PyAny>> {
+        #[cfg(not(Py_LIMITED_API))]
         if unsafe { ffi::PyType_SUPPORTS_WEAKREFS(ffi::Py_TYPE(self.as_ptr())) != 0 } {
             unsafe {
                 Ok(PyWeak::from_owned_ptr(
@@ -1080,6 +1155,10 @@ impl Py<PyAny> {
                 "cannot create weak reference to '{}' object",
                 self.getattr(py, crate::intern!(py, "__class__"))?
             )))
+        }
+        #[cfg(Py_LIMITED_API)]
+        unsafe {
+            PyWeak::from_owned_ptr_or_err(py, ffi::PyWeakref_NewRef(self.as_ptr(), ffi::Py_None()))
         }
     }
 }
