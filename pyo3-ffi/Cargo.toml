@@ -36,9 +36,6 @@ abi3-py311 = ["abi3", "pyo3-build-config/abi3-py311"]
 # Automatically generates `python3.dll` import libraries for Windows targets.
 generate-import-lib = ["pyo3-build-config/python3-dll-a"]
 
-# Experimental weakref optimizations
-experimental-weakref =[]
-
 
 [build-dependencies]
 pyo3-build-config = { path = "../pyo3-build-config", version = "0.19.1", features = ["resolve-config"] }

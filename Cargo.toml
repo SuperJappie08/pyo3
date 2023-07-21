@@ -60,12 +60,11 @@ widestring = "0.5.1"
 pyo3-build-config = { path = "pyo3-build-config", version = "0.19.1", features = ["resolve-config"] }
 
 [features]
-default = ["macros", "experimental-weakref"]
+default = ["macros"]
 
 # Enables pyo3::inspect module and additional type information on FromPyObject
 # and IntoPy traits
 experimental-inspect = []
-experimental-weakref = [ "pyo3-ffi/experimental-weakref"]
 
 # Enables macros: #[pyclass], #[pymodule], #[pyfunction] etc.
 macros = ["pyo3-macros", "indoc", "unindent"]
