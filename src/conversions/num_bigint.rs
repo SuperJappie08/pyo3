@@ -85,14 +85,18 @@ macro_rules! bigint_conversion {
                 let bytes = $to_bytes(self);
                 let bytes_obj = PyBytes::new_bound(py, &bytes);
                 let kwargs = if $is_signed > 0 {
-                    let kwargs = PyDict::new(py);
+                    let kwargs = PyDict::new_bound(py);
                     kwargs.set_item(crate::intern!(py, "signed"), true).unwrap();
                     Some(kwargs)
                 } else {
                     None
                 };
                 py.get_type::<PyLong>()
-                    .call_method("from_bytes", (bytes_obj, "little"), kwargs)
+                    .call_method(
+                        "from_bytes",
+                        (bytes_obj, "little"),
+                        kwargs.as_ref().map(crate::Bound::as_gil_ref),
+                    )
                     .expect("int.from_bytes() failed during to_object()") // FIXME: #1813 or similar
                     .into()
             }
@@ -261,6 +265,8 @@ fn int_n_bits(long: &Bound<'_, PyLong>) -> PyResult<usize> {
 
 #[cfg(test)]
 mod tests {
+    use self::{any::PyAnyMethods, dict::PyDictMethods};
+
     use super::*;
     use crate::types::{PyDict, PyModule};
     use indoc::indoc;
@@ -340,9 +346,9 @@ mod tests {
     fn convert_index_class() {
         Python::with_gil(|py| {
             let index = python_index_class(py);
-            let locals = PyDict::new(py);
+            let locals = PyDict::new_bound(py);
             locals.set_item("index", index).unwrap();
-            let ob = py.eval("index.C(10)", None, Some(locals)).unwrap();
+            let ob = py.eval_bound("index.C(10)", None, Some(&locals)).unwrap();
             let _: BigInt = ob.extract().unwrap();
         });
     }
