@@ -2,7 +2,11 @@ use crate::err::{DowncastError, PyResult};
 use crate::ffi_ptr_ext::FfiPtrExt;
 use crate::py_result_ext::PyResultExt;
 use crate::type_object::{PyTypeCheck, PyTypeInfo};
-use crate::types::any::{PyAny, PyAnyMethods};
+use crate::types::{
+    any::{PyAny, PyAnyMethods},
+    function::PyCFunction,
+};
+use crate::types::{PyDict, PyFunction, PyTuple, PyType};
 use crate::{ffi, AsPyPointer, Borrowed, Bound, PyNativeType, ToPyObject};
 
 /// Represents a Python `weakref.ReferenceType`.
@@ -183,6 +187,38 @@ impl PyWeakRef {
 
         let py = object.py();
         inner(object, callback.to_object(py).into_bound(py))
+    }
+
+    pub fn new_bound_with_closure<'py, C>(
+        object: &Bound<'py, PyAny>,
+        callback: C,
+    ) -> PyResult<Bound<'py, PyWeakRef>>
+    where
+        C: Fn(Bound<'_, Self>) -> PyResult<()>,
+    {
+        fn inner<'py>(
+            object: &Bound<'py, PyAny>,
+            callback: Bound<'py, PyAny>,
+        ) -> PyResult<Bound<'py, PyWeakRef>> {
+            unsafe {
+                Bound::from_owned_ptr_or_err(
+                    object.py(),
+                    ffi::PyWeakref_NewRef(object.as_ptr(), callback.as_ptr()),
+                )
+                .downcast_into_unchecked()
+            }
+        }
+        let py = object.py();
+        let callback = PyCFunction::new_closure_bound(
+            py,
+            None,
+            None,
+            move |args: &Bound<'_, PyTuple>, _: Option<&Bound<'_, PyDict>>| {
+                let (wref,) = args.extract::<(Bound<'_, PyWeakRef>,)>()?;
+                callback(wref)
+            },
+        )?.into_any();
+        inner(object, callback)
     }
 
     /// Upgrade the weakref to a direct object reference.
@@ -1057,7 +1093,7 @@ pub trait PyWeakRefMethods<'py> {
     /// [`PyWeakref_GetObject`]: https://docs.python.org/3/c-api/weakref.html#c.PyWeakref_GetObject
     /// [`weakref.ReferenceType`]: https://docs.python.org/3/library/weakref.html#weakref.ReferenceType
     /// [`weakref.ref`]: https://docs.python.org/3/library/weakref.html#weakref.ref
-    #[track_caller] 
+    #[track_caller]
     // TODO: This function is the reason every function tracks caller, however it only panics when the weakref object is not actually a weakreference type. So is it this neccessary?
     fn get_object_borrowed(&self) -> Borrowed<'_, 'py, PyAny>;
 }
